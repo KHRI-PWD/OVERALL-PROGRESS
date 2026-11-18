@@ -20,12 +20,16 @@ function sectionCompare(order){
  };
 }
 const flags={none:'No activity on either',q:'Only QField active',s:'Only Sheets active',both:'Both started',qc:'QField complete · Sheets pending',sc:'Sheets complete · QField pending',done:'Both complete',review:'Needs verification'};
+const qReady=q=>!!q&&q.listed>0&&q.covered===q.listed&&!q.reviewRequired&&q.review!==true;
+const sheetsReview=s=>!s||!Number.isFinite(s.progress)||s.status==='review'||s.status==='Needs verification'||s.needsReview;
+const sheetsReady=s=>!sheetsReview(s)&&s.progress>0.9;
 const status=({qfield:q,sheets:s})=>{
- if(!q||!s||!Number.isFinite(s.progress)||s.status==='review'||s.status==='Needs verification'||q.reviewRequired||q.review===true)return flags.review;
- const f=q.listed>0&&q.covered===q.listed, z=s.progress===1, a=(q.start??0)+(q.end??0)+(q.intermediate??0)+(q.unknown??0)>0, b=s.progress>0;
+ if(!q||sheetsReview(s)||q.reviewRequired||q.review===true)return flags.review;
+ const f=qReady(q), z=sheetsReady(s), a=(q.start??0)+(q.end??0)+(q.intermediate??0)+(q.unknown??0)>0, b=s.progress>0;
  return f&&z?flags.done:f?flags.qc:z?flags.sc:a&&b?flags.both:a?flags.q:b?flags.s:flags.none;
 };
-const card=(type,label,value,sub)=>'<article class="card '+type+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small></article>';
+const cardLink=(filter,label)=>'<button type="button" class="jump criteria-link" aria-controls="section-panel" data-filter="'+esc(filter)+'">'+esc(label)+' ↓</button>';
+const card=(type,label,value,sub,link='')=>'<article class="card '+type+'"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small>'+link+'</article>';
 const metric=(p,sub='',type='field')=>'<td class="metric"><strong>'+esc(pct(p))+'</strong>'+(Number.isFinite(p)?'<span class="bar '+type+'" aria-hidden="true"><i style="width:'+Math.min(100,Math.max(0,p*100))+'%"></i></span>':'')+(sub?'<small>'+esc(sub)+'</small>':'')+'</td>';
 const detail=q=>q?count(q.covered)+' / '+count(q.listed)+' roads': 'Not matched';
 let data, selected=[];
@@ -47,16 +51,16 @@ function render(){
  const qt=data.totals?.qfield??{covered:reduce('covered'),listed:reduce('listed')}, gs=rows.filter(s=>Number.isFinite(s.sheets?.progress));
  const gm=ratio(gs.reduce((n,s)=>n+s.sheets.progress,0),gs.length);
  $('fresh').textContent='QField: '+stamp(data.meta.qfieldAt)+'  •  Sheets: '+stamp(data.meta.sheetsAt);
- $('cards').innerHTML=card('field','QField road coverage',pct(ratio(qt.covered,qt.listed)),detail(qt)+' with matched endpoints')+
- card('sheets','Google Sheets progress',pct(gm),'Average across '+count(gs.length)+' section workbooks')+
+ $('cards').innerHTML=card('field','QField road coverage',pct(ratio(qt.covered,qt.listed)),detail(qt)+' with matched endpoints',cardLink('qfield-threshold',count(rows.filter(s=>qReady(s.qfield)).length)+' sections at 100%'))+
+ card('sheets','Google Sheets progress',pct(gm),'Average across '+count(gs.length)+' section workbooks',cardLink('sheets-threshold',count(rows.filter(s=>sheetsReady(s.sheets)).length)+' sections above 90%'))+
  '<button type="button" id="no-activity-card" class="card attn card-action" aria-controls="section-panel"><span>No activity on either</span><strong>'+count(rows.filter(s=>s.status===flags.none).length)+'</strong><small>View sections and divisions ↓</small></button>'+
- card('','Complete on both',count(rows.filter(s=>s.status===flags.done).length),count(data.meta.matchedCount??rows.filter(s=>s.qfield&&s.sheets).length)+' sections matched across sources');
+ '<button type="button" id="complete-card" class="card complete card-action" aria-controls="section-panel"><span>Complete on both</span><strong>'+count(rows.filter(s=>s.status===flags.done).length)+'</strong><small>QField 100% · Sheets above 90% ↓</small></button>';
  const o=$('order').value, key=o==='field'?'f':o==='sheets'?'s':'i';
  const score=d=>Number.isFinite(d[key])?d[key]*(o==='desc'?-1:1):Infinity;
  groupScores.sort((a,b)=>(o==='name'?0:score(a)-score(b))||a.division.localeCompare(b.division));
- $('divisions').innerHTML=groupScores.map(d=>'<tr><td><button type="button" class="jump" data-division="'+esc(d.division)+'">'+esc(d.division)+'</button></td>'+metric(d.f,detail(d.qfield))+metric(d.s,'','sheets')+'<td><strong>'+esc(pct(d.i))+'</strong></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-no-activity aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.none+' sections with no activity on either')+'">'+count(d.none)+'</button></td><td class="tabular">'+d.done+'</td></tr>').join('');
+ $('divisions').innerHTML=groupScores.map(d=>'<tr><td><button type="button" class="jump" data-division="'+esc(d.division)+'">'+esc(d.division)+'</button></td>'+metric(d.f,detail(d.qfield))+metric(d.s,'','sheets')+'<td><strong>'+esc(pct(d.i))+'</strong></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-no-activity aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.none+' sections with no activity on either')+'">'+count(d.none)+'</button></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-complete aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.done+' sections complete on both')+'">'+count(d.done)+'</button></td></tr>').join('');
  const div=$('division').value, st=$('status').value, search=$('search').value.trim().toLowerCase();
- selected=rows.filter(s=>(!div||s.division===div)&&(!st||s.status===st)&&(!search||[s.section,s.division,s.subdivision].filter(Boolean).some(v=>v.toLowerCase().includes(search)))).sort(sectionCompare($('section-order').value));
+ selected=rows.filter(s=>(!div||s.division===div)&&(!st||(st==='qfield-threshold'?qReady(s.qfield):st==='sheets-threshold'?sheetsReady(s.sheets):s.status===st))&&(!search||[s.section,s.division,s.subdivision].filter(Boolean).some(v=>v.toLowerCase().includes(search)))).sort(sectionCompare($('section-order').value));
  $('count').textContent=count(selected.length)+' of '+count(rows.length)+' sections shown';
  $('sections').innerHTML=selected.map(s=>'<tr><td><strong>'+esc(s.section)+'</strong></td><td>'+esc(s.division)+'</td>'+metric(ratio(s.qfield?.covered,s.qfield?.listed),detail(s.qfield))+metric(s.sheets?.progress,s.sheets?'':'Not matched','sheets')+'<td class="metric"><strong>'+esc(pct(s.followUp))+'</strong></td><td><span class="chip '+(s.status===flags.none?'alert':s.status===flags.done?'good':s.status===flags.review?'review':'')+'">'+esc(s.status)+'</span></td></tr>').join('')||'<tr><td colspan="6">No sections match these filters.</td></tr>';
  $('export').disabled=!selected.length;
@@ -73,8 +77,8 @@ function openSections(division='',filter=''){
  $('division').value=division;$('status').value=filter;$('search').value='';
  render();$('section-panel').scrollIntoView({block:'start'});$('sectitle').focus({preventScroll:true});
 }
-$('cards').onclick=e=>{if(e.target.closest('#no-activity-card'))openSections('',flags.none);};
-$('divisions').onclick=e=>{const b=e.target.closest('button[data-division]');if(b)openSections(b.dataset.division,b.hasAttribute('data-no-activity')?flags.none:'');};
+$('cards').onclick=e=>{if(e.target.closest('#no-activity-card'))openSections('',flags.none);else if(e.target.closest('#complete-card'))openSections('',flags.done);else {const b=e.target.closest('button[data-filter]');if(b)openSections('',b.dataset.filter);}};
+$('divisions').onclick=e=>{const b=e.target.closest('button[data-division]');if(b)openSections(b.dataset.division,b.hasAttribute('data-no-activity')?flags.none:b.hasAttribute('data-complete')?flags.done:'');};
 for(const id of ['status','search','order','division','section-order'])$(id).addEventListener(id==='search'?'input':'change',()=>{if(data)render()});
 $('reset').onclick=()=>{for(const id of ['status','search','division'])$(id).value='';$('section-order').value='f-high';if(data)render()};
 $('export').onclick=()=>{

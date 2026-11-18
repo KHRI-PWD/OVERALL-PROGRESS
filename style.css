@@ -12,3 +12,4 @@
 .emblem-frame{width:208px;height:124px}.emblem{min-width:0;min-height:0}
 @media(max-width:680px){.emblem-frame{width:156px;height:93px}.identity h1{font-size:clamp(26px,5.7vw,40px)}}
 @media(max-width:460px){.identity{flex-wrap:wrap;gap:14px}.emblem-frame{width:142px;height:80px}.identity h1{font-size:clamp(29px,8vw,37px)}}
+.card.complete{border-top-color:#53a280}.card.complete small,.criteria-link{color:#195b47}.card.complete:hover{background:#eaf8ef}.criteria-link{font-size:12px;margin-top:5px}
