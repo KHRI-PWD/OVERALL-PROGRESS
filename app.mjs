@@ -76,7 +76,7 @@ function openSections(division='',filter=''){
 $('cards').onclick=e=>{if(e.target.closest('#no-activity-card'))openSections('',flags.none);};
 $('divisions').onclick=e=>{const b=e.target.closest('button[data-division]');if(b)openSections(b.dataset.division,b.hasAttribute('data-no-activity')?flags.none:'');};
 for(const id of ['status','search','order','division','section-order'])$(id).addEventListener(id==='search'?'input':'change',()=>{if(data)render()});
-$('reset').onclick=()=>{for(const id of ['status','search','division','section-order'])$(id).value='';if(data)render()};
+$('reset').onclick=()=>{for(const id of ['status','search','division'])$(id).value='';$('section-order').value='f-high';if(data)render()};
 $('export').onclick=()=>{
  const quote=v=>{let t=String(v??'');if(/^[\s]*[=+\-@]/.test(t))t="'"+t;return '"'+t.replace(/"/g,'""')+'"'};
  const lines=[['Division','Section','QField roads covered','QField roads listed','QField coverage','Sheets progress','Follow-up score','Status','QField snapshot','Sheets snapshot'],...selected.map(s=>[s.division,s.section,s.qfield?.covered,s.qfield?.listed,pct(ratio(s.qfield?.covered,s.qfield?.listed)),pct(s.sheets?.progress),pct(s.followUp),s.status,data.meta.qfieldAt,data.meta.sheetsAt])];
