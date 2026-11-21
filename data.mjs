@@ -1,5 +1,6 @@
-import {normalize,progress,sectionProgress} from './sheets-engine.mjs';
+import * as bundledSheetsScoring from './sheets-engine.mjs';
 export const SOURCE_URLS={qfield:'https://arunmohan-007.github.io/kerala-pwd-road-survey/report.json',sheets:'https://khri-pwd.github.io/ROAD-DIGITIZATION-GOOGLE-SHEET-PROGRESS/snapshot.json'};
+export const SHEETS_ENGINE_URL=new URL('engine.js',SOURCE_URLS.sheets).href;
 const divisions={kasaragod:'kasargod',trivandrum:'thiruvananthapuram'};
 const canon=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const divKey=n=>{ const k=canon(String(n||'').replace(/ (district|division)\s*$/i,''));return divisions[k]||k; };
@@ -36,7 +37,7 @@ const qfScore=row=>{
  const notStarted=start+intermediate+end+unknown===0,complete=listed>0&&listed===covered;
  return {...out,progress:listed?covered/listed:null,status:complete?'done':notStarted?'none':'progress',notStarted,complete};
 };
-const shScore=section=>{
+const shScore=(section,{progress,sectionProgress})=>{
  const p=sectionProgress(section);
  const needsReview=Boolean(section.error||section.tabs.some(t=>t.kind!==2&&t.missing));
  return {progress:p,status:needsReview?'review':p===1?'done':p===0?'none':'progress',notStarted:p===0,
@@ -44,11 +45,12 @@ const shScore=section=>{
  tabs:section.tabs.map(t=>({kind:t.kind,name:t.name,progress:t.kind===2||t.notApplicable?null:progress(t),
  filled:t.filled,required:t.required,missing:!!t.missing,notApplicable:!!t.notApplicable,excluded:t.kind===2}))};
 };
-export function buildData(qfield,sheets){
+export function buildData(qfield,sheets,sheetsScoring=bundledSheetsScoring){
+ if(!['normalize','progress','sectionProgress'].every(k=>typeof sheetsScoring[k]==='function'))throw Error('Invalid Google Sheets scoring module');
  if(!Array.isArray(qfield?.divisions)||!qfield.divisions.length||!qfield.divisions.every(d=>typeof d.name==='string'&&Array.isArray(d.sections))) throw Error('Invalid QField report');
  if(!Array.isArray(sheets?.sections)||!sheets.sections.length||!sheets.sections.every(s=>typeof s.section==='string'&&typeof s.division==='string'&&Array.isArray(s.tabs))) throw Error('Invalid Sheets snapshot');
  // Do not retain the published raw worksheet rows, preceding report, or QField road names.
- const gs=normalize({sections:sheets.sections.map(s=>({...s,tabs:[...s.tabs]}))});
+ const gs=sheetsScoring.normalize({sections:sheets.sections.map(s=>({...s,tabs:[...s.tabs]}))});
  const qfieldAt=time(qfield.updatedAt),qfieldVerifiedThrough=time(qfield.sourceThrough),sheetsAt=time(sheets.publishedAt)||time(sheets.loadedAt);
  if(!qfieldAt||!sheetsAt)throw Error('Missing source timestamps');
  const groups=new Map(),slots=new Map(),rows=[],warnings=[];
@@ -63,7 +65,7 @@ export function buildData(qfield,sheets){
   for(const row of actual){slot(d,sectionKey(d,row.name)).q.push({name:row.name,division:g.division,qfield:qfScore(row)});qfieldCount++;}
  }
  for(const row of gs.sections){
-  const d=divKey(row.division),g=group(d,row.division), score=shScore(row);
+  const d=divKey(row.division),g=group(d,row.division), score=shScore(row,sheetsScoring);
   const sub=typeof row.subdivision==='string'?row.subdivision.trim():'';
   const subdivision=sub&&!/^not supplied$/i.test(sub)?sub:null;
   g.sheetValues.push(score);
@@ -90,11 +92,16 @@ export function buildData(qfield,sheets){
           sheets:aggregate([...groups.values()].flatMap(g=>g.sheetValues))},
   meta:{qfieldAt,qfieldVerifiedThrough,sheetsAt,qfieldCount,sheetsCount,matchedCount,warnings,qfieldMode:qfield.mode||null}};
 }
-export async function loadData({fetcher=fetch,signal}={}){
- const values=await Promise.all(Object.entries(SOURCE_URLS).map(async ([key,url])=>{
-  const res=await fetcher(url,{cache:'no-cache',credentials:'omit',signal});
+export async function loadData({fetcher=fetch,signal,importScoring=url=>import(url)}={}){
+ // The source dashboard owns scoring. Revalidate it with its snapshot rather than
+ // silently scoring new snapshots with a stale local copy.
+ const refresh=Date.now().toString();
+ const current=url=>{const u=new URL(url);u.searchParams.set('t',refresh);return u.href;};
+ const feeds=Object.entries(SOURCE_URLS).map(async ([key,url])=>{
+  const res=await fetcher(current(url),{cache:'no-store',credentials:'omit',signal});
   if(!res.ok)throw Error((key==='qfield'?'QField':'Sheets')+' source unavailable ('+res.status+')');
   return res.json();
- }));
- return buildData(...values);
+ });
+ const [qfield,sheets,scoring]=await Promise.all([...feeds,importScoring(current(SHEETS_ENGINE_URL))]);
+ return buildData(qfield,sheets,scoring);
 }

@@ -1,4 +1,4 @@
-import {loadData} from './data.mjs';
+import {loadData} from './data.mjs?v=8';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const count=n=>Number(n).toLocaleString('en-IN');
