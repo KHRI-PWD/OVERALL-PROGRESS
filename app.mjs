@@ -1,4 +1,3 @@
-import {loadData} from './data.mjs?v=8';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const count=n=>Number(n).toLocaleString('en-IN');
@@ -69,9 +68,34 @@ function render(){
 }
 const warning=(v)=>{$('error').hidden=!v;$('error').textContent=v??'';};
 function set(d){if(!Array.isArray(d.sections)||!d.sections.length||!Array.isArray(d.divisions)||!d.meta)throw Error('Invalid dashboard data');data=d;render();if(d.meta.warnings?.length) warning(d.meta.warnings.join(' '));else warning(null);}
+const verifiedCache='khri-overall-verified-v9';
+const newer=(incoming,current)=>!current||['qfieldAt','sheetsAt'].every(key=>Date.parse(incoming.meta[key])>=Date.parse(current.meta[key]));
+async function loadLive(){
+ if(typeof Worker!=='function'){
+  const {loadData}=await import('./data.mjs?v=9');
+  return loadData({signal:AbortSignal.timeout(14000)});
+ }
+ return new Promise((resolve,reject)=>{
+  const worker=new Worker(new URL('./refresh-worker.mjs?v=9',import.meta.url),{type:'module'});
+  const finish=(fn,value)=>{clearTimeout(limit);worker.terminate();fn(value)};
+  const limit=setTimeout(()=>finish(reject,Error('Source refresh timed out')),14000);
+  worker.onmessage=({data})=>data?.ok?finish(resolve,data.result):finish(reject,Error('Source refresh failed'));
+  worker.onerror=()=>finish(reject,Error('Source refresh failed'));
+ });
+}
 async function refresh(){
- $('refresh').disabled=true;const src=$('fresh').textContent;$('fresh').textContent='Checking both published sources…';
- try {set(await loadData({signal:AbortSignal.timeout(14000)}));} catch (e){if(data)render();else $('fresh').textContent=src;warning(data?'Refresh unavailable. Showing the last verified snapshot with the source times above.':'Dashboard data could not be loaded. Try refreshing or open the source dashboards below.');} finally {$('refresh').disabled=false;}
+ $('refresh').disabled=true;
+ if(!data)$('fresh').textContent='Checking both published sources…';
+ $('refresh').setAttribute('aria-busy','true');
+ try {
+  const live=await loadLive();
+  if(!newer(live,data))throw Error('Older source snapshot');
+  set(live);
+  try{localStorage.setItem(verifiedCache,JSON.stringify(live));}catch{}
+ } catch {
+  if(!data)$('fresh').textContent='Source times unavailable';
+  warning(data?'Refresh unavailable. Showing the last verified snapshot with the source times above.':'Dashboard data could not be loaded. Try refreshing or open the source dashboards below.');
+ } finally {$('refresh').disabled=false;$('refresh').removeAttribute('aria-busy');}
 }
 $('refresh').onclick=refresh;
 function openSections(division='',filter=''){
@@ -89,5 +113,12 @@ $('export').onclick=()=>{
  const href=URL.createObjectURL(new Blob(['\ufeff'+lines.map(r=>r.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
  const a=document.createElement('a');a.href=href;a.download='kerala-pwd-section-progress.csv';a.click();setTimeout(()=>URL.revokeObjectURL(href),5000);
 };
-try{const r=await fetch('./baseline.json');if(!r.ok)throw Error();set(await r.json());}catch{}
-await refresh();
+try{const cached=localStorage.getItem(verifiedCache);if(cached)set(JSON.parse(cached));}catch{}
+if(!data){
+ try{
+  const r=await fetch('./baseline.json?v=9');
+  if(r.ok){const baseline=await r.json();if(!data)set(baseline);}
+ }catch{}
+}
+// Let the initial dashboard paint before starting the background source check.
+requestAnimationFrame(()=>requestAnimationFrame(()=>{if(!$('refresh').disabled)refresh();}));

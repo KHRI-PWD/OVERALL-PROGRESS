@@ -98,7 +98,7 @@ export async function loadData({fetcher=fetch,signal,importScoring=url=>import(u
  const refresh=Date.now().toString();
  const current=url=>{const u=new URL(url);u.searchParams.set('t',refresh);return u.href;};
  const feeds=Object.entries(SOURCE_URLS).map(async ([key,url])=>{
-  const res=await fetcher(current(url),{cache:'no-store',credentials:'omit',signal});
+  const res=await fetcher(url,{cache:'no-cache',credentials:'omit',signal});
   if(!res.ok)throw Error((key==='qfield'?'QField':'Sheets')+' source unavailable ('+res.status+')');
   return res.json();
  });
