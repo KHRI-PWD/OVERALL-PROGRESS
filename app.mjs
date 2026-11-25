@@ -43,7 +43,7 @@ function render(){
  for(const s of rows) {if(!grouped.has(s.division))grouped.set(s.division,[]);grouped.get(s.division).push(s)}
  const groupScores=data.divisions.map(d=>{
   const rows=grouped.get(d.division)??[], q=d.qfield, s=d.sheets?.progress, f=ratio(q?.covered,q?.listed);
-  return {...d,f,s,i:followUp(f,s),low:rows.filter(below25Either).length,done:rows.filter(t=>t.status===flags.done).length};
+  return {...d,f,s,i:followUp(f,s),low:rows.filter(below25Either).length,total:rows.length,done:rows.filter(t=>t.status===flags.done).length};
  });
  const p=$('division').value;
  $('division').innerHTML='<option value="">All divisions</option>'+[...grouped.keys()].sort().map(d=>'<option value="'+esc(d)+'">'+esc(d)+'</option>').join('');
@@ -59,7 +59,7 @@ function render(){
  const o=$('order').value, key=o==='field'?'f':o==='sheets'?'s':'i';
  const score=d=>Number.isFinite(d[key])?d[key]*(o==='desc'?-1:1):Infinity;
  groupScores.sort((a,b)=>(o==='name'?0:score(a)-score(b))||a.division.localeCompare(b.division));
- $('divisions').innerHTML=groupScores.map(d=>'<tr><td><button type="button" class="jump" data-division="'+esc(d.division)+'">'+esc(d.division)+'</button></td>'+metric(d.f,detail(d.qfield))+metric(d.s,'','sheets')+'<td><strong>'+esc(pct(d.i))+'</strong></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-below-25 aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.low+' sections below 25% in either source')+'">'+count(d.low)+'</button></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-complete aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.done+' sections complete on both')+'">'+count(d.done)+'</button></td></tr>').join('');
+ $('divisions').innerHTML=groupScores.map(d=>'<tr><td><button type="button" class="jump" data-division="'+esc(d.division)+'">'+esc(d.division)+'</button></td>'+metric(d.f,detail(d.qfield))+metric(d.s,'','sheets')+'<td><strong>'+esc(pct(d.i))+'</strong></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-below-25 aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.low+' sections below 25% in either source')+'">'+count(d.low)+'</button></td><td class="tabular">'+'<button type="button" class="jump" data-division="'+esc(d.division)+'" data-complete aria-controls="section-panel" aria-label="'+esc(d.division+': '+d.done+' of '+d.total+' sections complete on both')+'">'+count(d.done)+' / '+count(d.total)+'</button></td></tr>').join('');
  const div=$('division').value, st=$('status').value, search=$('search').value.trim().toLowerCase();
  selected=rows.filter(s=>(!div||s.division===div)&&(!st||(st==='qfield-threshold'?qReady(s.qfield):st==='sheets-threshold'?sheetsReady(s.sheets):st==='below-25'?below25Either(s):s.status===st))&&(!search||[s.section,s.division,s.subdivision].filter(Boolean).some(v=>v.toLowerCase().includes(search)))).sort(sectionCompare($('section-order').value));
  $('count').textContent=count(selected.length)+' of '+count(rows.length)+' sections shown';
