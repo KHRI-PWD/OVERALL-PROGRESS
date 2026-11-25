@@ -37,13 +37,14 @@ const qfScore=row=>{
  const notStarted=start+intermediate+end+unknown===0,complete=listed>0&&listed===covered;
  return {...out,progress:listed?covered/listed:null,status:complete?'done':notStarted?'none':'progress',notStarted,complete};
 };
+const excludedFromProgress=kind=>kind===2||kind===3;
 const shScore=(section,{progress,sectionProgress})=>{
  const p=sectionProgress(section);
- const needsReview=Boolean(section.error||section.tabs.some(t=>t.kind!==2&&t.missing));
+ const needsReview=Boolean(section.error||section.tabs.some(t=>!excludedFromProgress(t.kind)&&t.missing));
  return {progress:p,status:needsReview?'review':p===1?'done':p===0?'none':'progress',notStarted:p===0,
  filled:p===1,over90:p>0.9,needsReview,
- tabs:section.tabs.map(t=>({kind:t.kind,name:t.name,progress:t.kind===2||t.notApplicable?null:progress(t),
- filled:t.filled,required:t.required,missing:!!t.missing,notApplicable:!!t.notApplicable,excluded:t.kind===2}))};
+ tabs:section.tabs.map(t=>({kind:t.kind,name:t.name,progress:excludedFromProgress(t.kind)||t.notApplicable?null:progress(t),
+ filled:t.filled,required:t.required,missing:!!t.missing,notApplicable:!!t.notApplicable,excluded:excludedFromProgress(t.kind)}))};
 };
 export function buildData(qfield,sheets,sheetsScoring=bundledSheetsScoring){
  if(!['normalize','progress','sectionProgress'].every(k=>typeof sheetsScoring[k]==='function'))throw Error('Invalid Google Sheets scoring module');

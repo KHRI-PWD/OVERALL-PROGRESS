@@ -68,15 +68,15 @@ function render(){
 }
 const warning=(v)=>{$('error').hidden=!v;$('error').textContent=v??'';};
 function set(d){if(!Array.isArray(d.sections)||!d.sections.length||!Array.isArray(d.divisions)||!d.meta)throw Error('Invalid dashboard data');data=d;render();if(d.meta.warnings?.length) warning(d.meta.warnings.join(' '));else warning(null);}
-const verifiedCache='khri-overall-verified-v9';
+const verifiedCache='khri-overall-verified-v10';
 const newer=(incoming,current)=>!current||['qfieldAt','sheetsAt'].every(key=>Date.parse(incoming.meta[key])>=Date.parse(current.meta[key]));
 async function loadLive(){
  if(typeof Worker!=='function'){
-  const {loadData}=await import('./data.mjs?v=9');
+  const {loadData}=await import('./data.mjs?v=10');
   return loadData({signal:AbortSignal.timeout(14000)});
  }
  return new Promise((resolve,reject)=>{
-  const worker=new Worker(new URL('./refresh-worker.mjs?v=9',import.meta.url),{type:'module'});
+  const worker=new Worker(new URL('./refresh-worker.mjs?v=10',import.meta.url),{type:'module'});
   const finish=(fn,value)=>{clearTimeout(limit);worker.terminate();fn(value)};
   const limit=setTimeout(()=>finish(reject,Error('Source refresh timed out')),14000);
   worker.onmessage=({data})=>data?.ok?finish(resolve,data.result):finish(reject,Error('Source refresh failed'));
@@ -116,7 +116,7 @@ $('export').onclick=()=>{
 try{const cached=localStorage.getItem(verifiedCache);if(cached)set(JSON.parse(cached));}catch{}
 if(!data){
  try{
-  const r=await fetch('./baseline.json?v=9');
+  const r=await fetch('./baseline.json?v=10');
   if(r.ok){const baseline=await r.json();if(!data)set(baseline);}
  }catch{}
 }
